@@ -1,61 +1,69 @@
 if (require(survey) == FALSE) 
   {
     install.packages("survey")
+    library(survey)
   }
 if(require(sas7bdat) == FALSE)
 {
   install.packages("sas7bdat")
+  library(sas7bdat)
 }
-library(survey)
-library(sas7bdat)
 
-# import SAS data set
-if(is.data.frame(chs2011) == FALSE)
-{
-  chs2011 <- read.sas7bdat("http://www.nyc.gov/html/doh/downloads/sas/episrv/chs2011_public.sas7bdat")
+if (!file.exists("chs2011.RData")) {
+  # import SAS data set (not necessary if R object is already saved)
+  chs2011 <- read.sas7bdat("chs2011_public.sas7bdat")
+  # Save as R data object (not necessary if R object is already saved)
+  save(chs2011,file="chs2011.RData")
 }
-attach(chs2011)
 
-# code lgb as binary variable
-lgb <- integer(length(sexualid))
-lgb[sexualid == 2] <- 1
-lgb[sexualid == 3] <- 1
-lgb[msm == 1] <- 1
-lgb[wsw == 1] <- 1
-lgb[sexualid == 1] <- 0
-# R doesn't read '.d' & '.r' values from SAS data. Encode them as 'NA'.
-lgb[sexualid == NaN] <- NA
+# Load R object 
+load("chs2011.RData")
+#change NaN's to NA
+chs2011[is.na(chs2011)] <- NA
 
-#recode didntgetcare as binary
-nocare <- integer(length(didntgetcare11))
-nocare[didntgetcare11 == 2] <- 1
-nocare[didntgetcare11 == 1] <- 0
-nocare[didntgetcare11 == NaN] <- NA
 
-#recode povgroup3
-povrec <- povgroup3
-povrec[povgroup3 == 4] <- NA
+# This section has issues -- I have to manually run some of the lines 2-3 times in order
+# for it to encode properly. I changed the order, first coding the zeros and NA's,
+# then coding 1's on top of them for sexualid, msm, and wsw.
+# For some reason, if I don't include !is.na in the criteria for these,
+# it ends up completely confused.
+
+chs2011$sexualid[is.na(chs2011$sexualid)] <- NA
+chs2011$lgb[chs2011$sexualid == 1 & !is.na(chs2011$sexualid)] <- 0
+chs2011$lgb[chs2011$sexualid == 2 & !is.na(chs2011$sexualid)] <- 1
+chs2011$lgb[chs2011$sexualid == 3 & !is.na(chs2011$sexualid)] <- 1
+chs2011$lgb[chs2011$msm == 1 & !is.na(chs2011$msm)] <- 1
+chs2011$lgb[chs2011$wsw == 1 & !is.na(chs2011$wsw)] <- 1
+
+chs2011$lgb <- factor(chs2011$lgb)
+
+#recode didntgetcare 0,1,NA
+chs2011$nocare <- factor(chs2011$didntgetcare11-1)
+
+#recode povgroup3 1=0,2=1,3=2,4=NA
+chs2011$povrec <- factor(chs2011$povgroup3-1)
+chs2011$povrec[chs2011$povrec==3] <- NA
+
 #recode generalhealth
-healthrec <- generalhealth
-healthrec[generalhealth < 4] <- 0
-healthrec[generalhealth >= 4] <- 1
+chs2011$healthrec[chs2011$generalhealth < 4 & !is.na(chs2011$generalhealth)] <- 0
+chs2011$healthrec[chs2011$generalhealth >= 4 & !is.na(chs2011$generalhealth)] <- 1
+chs2011$healthrec <- factor(chs2011$healthrec)
 
 # MENTAL HEALTH VARIABLES
 # recode kessler variables
-kesslerbin = integer(length(k6_12m))
-kesslerbin[k6_12m >= 13] <- 0
-kesslerbin[k6_12m < 13] <- 1
-#create binary variable for received MH treatment past yr
-mhtbin <- integer(length(pastyrmht))
-mhtbin[pastyrmht == 1] <- 0
-mhtbin[pastyrmht <= 2] <- 1
-#create composite variable for kesslerbin >= 13 but no MH trtmt
-nohm <- integer(length(k6_12m))
-nohm[kesslerbin == 0 & mhtbin == 0] <- 1
+chs2011$kesslerbin[chs2011$k6_12m >= 13] <- 0
+chs2011$kesslerbin[chs2011$k6_12m < 13] <- 1
+chs2011$kesslerbin <- factor(chs2011$kesslerbin)
 
-# add newly created variables to chs2011 dataframe
-chs2011 <- data.frame(chs2011,lgb,nocare,povrec,healthrec,
-                      kesslerbin,mhtbin,nohm)
+#create binary variable for received MH treatment past yr
+chs2011$mhtbin[chs2011$pastyrmht == 1 & !is.na(chs2011$pastyrmht)] <- 0
+chs2011$mhtbin[chs2011$pastyrmht >= 2 & !is.na(chs2011$pastyrmht)] <- 1
+chs2011$mhtbin <- factor(chs2011$mhtbin)
+
+#create composite variable for kesslerbin >= 13 but no MH trtmt
+chs2011$nohm[is.na(chs2011$mhtbin)] <- 0
+chs2011$nohm[chs2011$kesslerbin == 0 & chs2011$mhtbin == 0 & !is.na(chs2011$mhtbin)] <- 1
+chs2011$nohm <- factor(chs2011$nohm)
 # reorder factor variables to specify reference values for regression
 
 
